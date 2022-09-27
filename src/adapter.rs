@@ -16,7 +16,9 @@ impl Adapter for CompleteBinaryTree {
 
     fn nei(&self, input: Iter) -> Bundle {
         let input = Chunks::new(input, self.batching).flatten();
-        boxit(input.map(|x| (x, boxit((10*x+1..=10*x+3).inspect(|x| println!("gen {}", x))))))
+        boxit(input.map(|x| (x, boxit(
+            (10*x+1..=(10*x+3).min(9999))
+                .inspect(|x| println!("gen {}", x))))))
     }
 }
 
@@ -31,7 +33,9 @@ impl Adapter for Comb {
 
     fn nei(&self, input: Iter) -> Bundle {
         let input = Chunks::new(input, self.batching).flatten();
-        boxit(input.map(|x| (x, boxit((10*x+1..=10*x+5*((x+1)%2)).inspect(|x| println!("gen {}", x))))))
+        boxit(input.map(|x| (x, boxit(
+            (10*x+1..=(10*x+5*((x+1)%2)).min(9999))
+                .inspect(|x| println!("gen {}", x))))))
     }
 }
 

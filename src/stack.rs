@@ -48,12 +48,14 @@ impl Iterator for Stack {
             }
         }
 
-        if self.next_from < self.levels.len() {
-            let level = &mut self.levels[self.next_from];
-            if let Some(x) = level.hard_peek() {
-                self.next_from += 1;
-                return Some(x);
-            }
+        if self.next_from == self.levels.len() {
+            self.extend();
+        }
+
+        let level = &mut self.levels[self.next_from];
+        if let Some(x) = level.hard_peek() {
+            self.next_from += 1;
+            return Some(x);
         }
 
         while self.next_from > 0 {
@@ -77,9 +79,6 @@ mod tests {
             batching: 2,
         });
         let mut s = Stack::new(a);
-        s.extend();
-        s.extend();
-        s.extend();
 
         for result in s {
             println!("out {}", result);
@@ -92,9 +91,6 @@ mod tests {
             batching: 1,
         });
         let mut s = Stack::new(a);
-        s.extend();
-        s.extend();
-        s.extend();
 
         for result in s {
             println!("out {}", result);
