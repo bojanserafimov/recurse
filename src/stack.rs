@@ -42,7 +42,7 @@ impl Iterator for Stack {
     fn next(&mut self) -> Option<Self::Item> {
         if self.return_eager {
             for l in &mut self.levels {
-                if let Some(x) = l.queued_peek() {
+                if let Some(x) = l.pop_passed_unprepared() {
                     return Some(x);
                 }
             }
@@ -54,20 +54,20 @@ impl Iterator for Stack {
         }
 
         // We have 1 output prepared at level self.next_from - 1
-        // (because of the self.next_from invariant), so it's
-        // safe to hard_peek at self.next_from.
-        if let Some(x) = self.levels[self.next_from].hard_peek() {
+        // because of the self.next_from invariant, so it's safe
+        // to prepare(1).
+        if let Some(x) = self.levels[self.next_from].prepare(1) {
             // Increment so that the search behaves like dfs
             self.next_from += 1;
             return Some(x);
         }
 
-        // If hard_peek at this level returned None, it's not safe to
-        // try again since we don't have inputs prepared. Try to
-        // prepare using soft_peek. Move up the stack until we find
+        // If prepare(1) at this level returned None, it's not safe to
+        // try again since we don't have inputs prepared anymore. Try to
+        // prepare using prepare(0). Move up the stack until we find
         // something.
         while self.next_from > 0 {
-            if let Some(x) = self.levels[self.next_from - 1].soft_peek() {
+            if let Some(x) = self.levels[self.next_from - 1].prepare(0) {
                 return Some(x);
             }
             self.next_from -= 1;

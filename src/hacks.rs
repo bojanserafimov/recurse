@@ -15,8 +15,12 @@ pub fn flat(b: Bundle) -> Iter {
 pub struct BundleReader {
     inner: Bundle,
     buffer: Iter,
-    peeked: VecDeque<i32>,
-    passed: VecDeque<i32>,
+
+    /// Items already seen (and probably reported as outputs), but not yet pulled from next()
+    prepared: VecDeque<i32>,
+
+    /// Items pulled from next() without being prepared first. This can happen with batching.
+    passed_unprepared: VecDeque<i32>,
 }
 
 // Flatten, with the ability to soft_peek
@@ -25,51 +29,42 @@ impl BundleReader {
         BundleReader {
             inner: bundle,
             buffer: boxit(0..0),
-            peeked: VecDeque::new(),
-            passed: VecDeque::new(),
+            prepared: VecDeque::new(),
+            passed_unprepared: VecDeque::new(),
         }
     }
 
-    pub fn queued_peek(&mut self) -> Option<i32> {
-        if let Some(x) = self.passed.pop_front() {
+    pub fn pop_passed_unprepared(&mut self) -> Option<i32> {
+        if let Some(x) = self.passed_unprepared.pop_front() {
             return Some(x);
         }
 
         None
     }
 
-    pub fn soft_peek(&mut self) -> Option<i32> {
-        if let Some(x) = self.passed.pop_front() {
-            return Some(x);
+    /// Prepare while not pulling more than allowed from the parent
+    pub fn prepare(&mut self, pull_limit: usize) -> Option<i32> {
+        let mut pull_limit = pull_limit;
+        loop {
+            if let Some(x) = self.passed_unprepared.pop_front() {
+                return Some(x);
+            }
+
+            if let Some(x) = self.buffer.next() {
+                self.prepared.push_back(x);
+                return Some(x);
+            }
+
+            if pull_limit == 0 {
+                return None;
+            }
+            if let Some((_, i)) = self.inner.next() {
+                self.buffer = i;
+            } else {
+                return None;
+            }
+            pull_limit -= 1;
         }
-
-        if let Some(x) = self.buffer.next() {
-            self.peeked.push_back(x);
-            return Some(x);
-        }
-        None
-    }
-
-    pub fn hard_peek(&mut self) -> Option<i32> {
-
-        // TODO it's too much to loop. What if I just try once instead?
-        if let Some(x) = self.buffer.next() {
-            self.peeked.push_back(x);
-            return Some(x);
-        }
-
-        if let Some((_, i)) = self.inner.next() {
-            self.buffer = i;
-        } else {
-            return None;
-        }
-
-        if let Some(x) = self.buffer.next() {
-            self.peeked.push_back(x);
-            return Some(x);
-        }
-
-        None
     }
 }
 
@@ -79,12 +74,12 @@ impl Iterator for BundleReader {
     // TODO if layer is locked, avoid pulling too much on next()
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(x) = self.peeked.pop_front() {
+            if let Some(x) = self.prepared.pop_front() {
                 return Some(x);
             }
 
             if let Some(x) = self.buffer.next() {
-                self.passed.push_back(x);
+                self.passed_unprepared.push_back(x);
                 return Some(x);
             }
 
@@ -116,16 +111,12 @@ impl RcBundleReader {
         }
     }
 
-    pub fn queued_peek(&mut self) -> Option<i32> {
-        self.inner.as_ref().borrow_mut().queued_peek()
+    pub fn pop_passed_unprepared(&mut self) -> Option<i32> {
+        self.inner.as_ref().borrow_mut().pop_passed_unprepared()
     }
 
-    pub fn soft_peek(&mut self) -> Option<i32> {
-        self.inner.as_ref().borrow_mut().soft_peek()
-    }
-
-    pub fn hard_peek(&mut self) -> Option<i32> {
-        self.inner.as_ref().borrow_mut().hard_peek()
+    pub fn prepare(&mut self, pull_limit: usize) -> Option<i32> {
+        self.inner.as_ref().borrow_mut().prepare(pull_limit)
     }
 }
 
