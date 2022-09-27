@@ -12,11 +12,6 @@ struct Stack {
     // Largest index for which we can hard_peek without pulling from parent.
     // Assumes there's no batching. Works fine in case there's batching.
     next_from: usize,
-
-    // If true, elements pulled in advance because of batching will be returned
-    // right after the batch result. This is more eager than usual, but will produce
-    // out of order results
-    return_eager: bool,
 }
 
 impl Stack {
@@ -29,7 +24,6 @@ impl Stack {
             adapter: a,
             queue: VecDeque::new(),
             next_from: 0,
-            return_eager: false,
         }
     }
 
@@ -59,14 +53,6 @@ impl Iterator for Stack {
     type Item = i32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.return_eager {
-            for l in &mut self.levels {
-                if let Some(x) = l.pop_passed_unprepared() {
-                    return Some(x);
-                }
-            }
-        }
-
         if let Some(x) = self.queue.pop_front() {
             return Some(x);
         }
