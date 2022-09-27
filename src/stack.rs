@@ -48,16 +48,24 @@ impl Iterator for Stack {
             }
         }
 
+        // Add a new level if necessary
         if self.next_from == self.levels.len() {
             self.extend();
         }
 
-        let level = &mut self.levels[self.next_from];
-        if let Some(x) = level.hard_peek() {
+        // We have 1 output prepared at level self.next_from - 1
+        // (because of the self.next_from invariant), so it's
+        // safe to hard_peek at self.next_from.
+        if let Some(x) = self.levels[self.next_from].hard_peek() {
+            // Increment so that the search behaves like dfs
             self.next_from += 1;
             return Some(x);
         }
 
+        // If hard_peek at this level returned None, it's not safe to
+        // try again since we don't have inputs prepared. Try to
+        // prepare using soft_peek. Move up the stack until we find
+        // something.
         while self.next_from > 0 {
             if let Some(x) = self.levels[self.next_from - 1].soft_peek() {
                 return Some(x);
