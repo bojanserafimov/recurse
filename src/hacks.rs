@@ -16,6 +16,12 @@ pub struct BundleReader {
     inner: Bundle,
     buffer: Iter,
 
+    /// Number of times pulled buffers from the bundle
+    num_pulled: usize,
+
+    /// Number of outputs so far
+    num_prepared: usize,
+
     /// Items already seen (and probably reported as outputs), but not yet pulled from next()
     prepared: VecDeque<i32>,
 
@@ -29,13 +35,24 @@ impl BundleReader {
         BundleReader {
             inner: bundle,
             buffer: boxit(0..0),
+            num_pulled: 0,
+            num_prepared: 0,
             prepared: VecDeque::new(),
             passed_unprepared: VecDeque::new(),
         }
     }
 
+    pub fn get_num_pulled(&self) -> usize {
+        self.num_pulled
+    }
+
+    pub fn get_num_prepared(&self) -> usize {
+        self.num_prepared
+    }
+
     pub fn pop_passed_unprepared(&mut self) -> Option<i32> {
         if let Some(x) = self.passed_unprepared.pop_front() {
+            self.num_prepared += 1;
             return Some(x);
         }
 
@@ -47,11 +64,13 @@ impl BundleReader {
         let mut pull_limit = pull_limit;
         loop {
             if let Some(x) = self.passed_unprepared.pop_front() {
+                self.num_prepared += 1;
                 return Some(x);
             }
 
             if let Some(x) = self.buffer.next() {
                 self.prepared.push_back(x);
+                self.num_prepared += 1;
                 return Some(x);
             }
 
@@ -59,6 +78,7 @@ impl BundleReader {
                 return None;
             }
             if let Some((_, i)) = self.inner.next() {
+                self.num_pulled += 1;
                 self.buffer = i;
             } else {
                 return None;
@@ -71,7 +91,6 @@ impl BundleReader {
 impl Iterator for BundleReader {
     type Item = i32;
 
-    // TODO if layer is locked, avoid pulling too much on next()
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(x) = self.prepared.pop_front() {
@@ -84,6 +103,7 @@ impl Iterator for BundleReader {
             }
 
             if let Some((_, i)) = self.inner.next() {
+                self.num_pulled += 1;
                 self.buffer = i;
             } else {
                 return None;
@@ -109,6 +129,14 @@ impl RcBundleReader {
         Self {
             inner: Rc::clone(&self.inner)
         }
+    }
+
+    pub fn get_num_prepared(&self) -> usize {
+        self.inner.as_ref().borrow().get_num_prepared()
+    }
+
+    pub fn get_num_pulled(&self) -> usize {
+        self.inner.as_ref().borrow().get_num_pulled()
     }
 
     pub fn pop_passed_unprepared(&mut self) -> Option<i32> {

@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::hacks::*;
 use crate::adapter;
 
@@ -5,6 +7,7 @@ use crate::adapter;
 struct Stack {
     levels: Vec<RcBundleReader>,
     adapter: Box<dyn adapter::Adapter>,
+    queue: VecDeque<i32>,
 
     // Largest index for which we can hard_peek without pulling from parent.
     // Assumes there's no batching. Works fine in case there's batching.
@@ -24,6 +27,7 @@ impl Stack {
         Stack {
             levels,
             adapter: a,
+            queue: VecDeque::new(),
             next_from: 0,
             return_eager: false,
         }
@@ -33,6 +37,21 @@ impl Stack {
         let top = RcBundleReader::clone(&self.levels[self.levels.len() - 1]);
         let new = RcBundleReader::new(self.adapter.nei(boxit(top)));
         self.levels.push(new);
+    }
+
+    fn output(&mut self, level: usize, value: i32) -> i32 {
+        let mut res = value;
+
+        // Ensure correct order
+        while level > 0 && self.levels[level].get_num_pulled() > self.levels[level - 1].get_num_prepared() {
+            // NOTE: do not reorder these lines
+            let x = self.levels[level - 1].pop_passed_unprepared().unwrap();
+            let new_res = self.output(level - 1, x);
+            self.queue.push_back(res);
+            res = new_res;
+        }
+
+        res
     }
 }
 
@@ -48,6 +67,10 @@ impl Iterator for Stack {
             }
         }
 
+        if let Some(x) = self.queue.pop_front() {
+            return Some(x);
+        }
+
         // Add a new level if necessary
         if self.next_from == self.levels.len() {
             self.extend();
@@ -59,7 +82,7 @@ impl Iterator for Stack {
         if let Some(x) = self.levels[self.next_from].prepare(1) {
             // Increment so that the search behaves like dfs
             self.next_from += 1;
-            return Some(x);
+            return Some(self.output(self.next_from - 1, x));
         }
 
         // If prepare(1) at this level returned None, it's not safe to
@@ -68,7 +91,7 @@ impl Iterator for Stack {
         // something.
         while self.next_from > 0 {
             if let Some(x) = self.levels[self.next_from - 1].prepare(0) {
-                return Some(x);
+                return Some(self.output(self.next_from - 1, x));
             }
             self.next_from -= 1;
         }
