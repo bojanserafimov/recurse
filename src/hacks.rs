@@ -69,8 +69,10 @@ impl BundleReader {
             }
 
             if let Some(x) = self.buffer.next() {
+                // TODO make sure not to do this if element gets coerced
                 self.prepared.push_back(x);
                 self.num_prepared += 1;
+
                 return Some(x);
             }
 

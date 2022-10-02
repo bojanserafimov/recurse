@@ -12,6 +12,8 @@ struct Stack {
     // Largest index for which we can hard_peek without pulling from parent.
     // Assumes there's no batching. Works fine in case there's batching.
     next_from: usize,
+
+    skip_block: bool,
 }
 
 impl Stack {
@@ -65,10 +67,14 @@ impl Iterator for Stack {
         // We have 1 output prepared at level self.next_from - 1
         // because of the self.next_from invariant, so it's safe
         // to prepare(1).
-        if let Some(x) = self.levels[self.next_from].prepare(1) {
-            // Increment so that the search behaves like dfs
-            self.next_from += 1;
-            return Some(self.output(self.next_from - 1, x));
+        if !self.skip_block {
+            if let Some(x) = self.levels[self.next_from].prepare(1) {
+                // Increment so that the search behaves like dfs
+                self.next_from += 1;
+                return Some(self.output(self.next_from - 1, x));
+                // TODO if no element got prepared because of coercion,
+                // set skip_block to true
+            }
         }
 
         // If prepare(1) at this level returned None, it's not safe to
@@ -78,6 +84,8 @@ impl Iterator for Stack {
         while self.next_from > 0 {
             if let Some(x) = self.levels[self.next_from - 1].prepare(0) {
                 return Some(self.output(self.next_from - 1, x));
+                // TODO if no element got prepared because of coercion,
+                // set skip_block to true
             }
             self.next_from -= 1;
         }
